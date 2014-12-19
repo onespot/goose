@@ -23,23 +23,21 @@ package com.gravity.goose.images
  * Date: 8/18/11
  */
 
-import javax.imageio.ImageIO
 import java.awt.color.CMMException
 import java.awt.image.BufferedImage
-import com.gravity.goose.utils.{URLHelper, Logging}
-import org.apache.http.client.HttpClient
-import org.apache.http.params.HttpConnectionParams
-import org.apache.http.HttpEntity
-import org.apache.http.protocol.{BasicHttpContext, HttpContext}
-import org.apache.http.client.protocol.ClientContext
-import org.apache.http.client.methods.HttpGet
-import java.util.{Random, ArrayList, HashMap}
 import java.io._
+import java.util.HashMap
+import javax.imageio.ImageIO
+
 import com.gravity.goose.Configuration
-import com.gravity.goose.text.{string, HashUtils}
-import org.apache.http.util.EntityUtils
+import com.gravity.goose.network.ImageFetchException
+import com.gravity.goose.text.{HashUtils, string}
+import com.gravity.goose.utils.{Logging, URLHelper}
 import org.apache.commons.io.IOUtils
-import com.gravity.goose.network.{ImageFetchException, HtmlFetcher}
+import org.apache.http.{HttpResponse, HttpEntity}
+import org.apache.http.client.HttpClient
+import org.apache.http.client.methods.CloseableHttpResponse
+import org.apache.http.util.EntityUtils
 
 object ImageUtils extends Logging {
   val spaceRegex = " ".r
@@ -178,11 +176,23 @@ object ImageUtils extends Logging {
 
       trace("Not found locally...starting to download image: " + imageSrc)
       fetchEntity(httpClient, imageSrc, config) match {
-        case Some(entity) => {
+        case Some(response) => {
           trace("Got entity for " + imageSrc)
-          writeEntityContentsToDisk(entity, linkhash, imageSrc, config) match {
-            case Some(locallyStoredImage) => trace("Img Write successfull to disk"); Some(locallyStoredImage)
-            case None => trace("Unable to write contents to disk: " + imageSrc); None
+          try {
+            writeEntityContentsToDisk(response.getEntity, linkhash, imageSrc, config) match {
+              case Some(locallyStoredImage) => {
+                trace("Img Write successfull to disk")
+                Some(locallyStoredImage)
+              };
+              case None => trace("Unable to write contents to disk: " + imageSrc); None
+            }
+          } finally {
+            response match {
+              case closable: CloseableHttpResponse =>  {
+                closable.close()
+              }
+              case _ => null
+            }
           }
         }
         case None => trace("Unable to fetch entity for: " + imageSrc); None
@@ -268,8 +278,7 @@ object ImageUtils extends Logging {
 
   def cleanImageSrcString(imgSrc: String): String = spaceRegex.replaceAllIn(imgSrc, "%20")
 
-  def fetchEntity(httpClient: HttpClient, imageSrc: String, config: Configuration): Option[HttpEntity] = {
-
+  def fetchEntity(httpClient: HttpClient, imageSrc: String, config: Configuration): Option[HttpResponse] = {
     URLHelper.tryToHttpGet(imageSrc) match {
       case Some(httpget) => {
         val response = try {
@@ -283,7 +292,7 @@ object ImageUtils extends Logging {
           None
         } else {
           try {
-            Option(response.getEntity)
+            Option(response)
           } catch {
             case e: Exception => warn(e, e.toString); httpget.abort(); None
           }
@@ -294,7 +303,6 @@ object ImageUtils extends Logging {
         None
       }
     }
-
   }
 
 
