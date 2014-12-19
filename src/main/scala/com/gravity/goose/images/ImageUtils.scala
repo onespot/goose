@@ -272,24 +272,13 @@ object ImageUtils extends Logging {
 
     URLHelper.tryToHttpGet(imageSrc) match {
       case Some(httpget) => {
-        val localContext: HttpContext = new BasicHttpContext
-        localContext.setAttribute(ClientContext.COOKIE_STORE, HtmlFetcher.emptyCookieStore)
         val response = try {
-          val httpClient = config.getHtmlFetcher.getHttpClient // this doesn't use the passed in httpClient, I'm not sure why...
-          val params = httpClient.getParams
-
-          HttpConnectionParams.setConnectionTimeout(params, config.getImageConnectionTimeout())
-          HttpConnectionParams.setSoTimeout(params, config.getImageSocketTimeout())
-
-          httpClient.execute(httpget, localContext)
+          httpClient.execute(httpget)
         }
         catch {
           case ex: Exception => throw new ImageFetchException(imageSrc, ex)
         }
-
         val respStatus = response.getStatusLine.getStatusCode
-
-
         if (respStatus != 200) {
           None
         } else {
@@ -299,7 +288,6 @@ object ImageUtils extends Logging {
             case e: Exception => warn(e, e.toString); httpget.abort(); None
           }
         }
-
       }
       case None => {
         warn("Unable to parse imageSrc: '" + imageSrc + "' into HttpGet")
